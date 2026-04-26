@@ -1,0 +1,14 @@
+torch>=2.0.0
+torchvision
+timm>=0.9.0
+opencv-python
+mediapipe
+mtcnn
+numpy>=1.24.0
+pandas
+matplotlib
+seaborn
+scikit-learn
+tqdm
+scipy
+pyvirtualcam
