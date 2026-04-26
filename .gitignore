@@ -163,7 +163,9 @@ Demo/__pycache__/
 *.pth
 *.h5
 Demo/diagnosis_results*.csv
-extracted_text*.txt
-*.docx
 *.pdf
 video demo/
+Chương_*.md
+Huong_Nang_Cap_Robustness.md
+extracted_text*.txt
+*.docx

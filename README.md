@@ -85,10 +85,7 @@ The model shows exceptional balance between Precision and Recall, minimizing Fal
 ---
 
 ## 📝 Research & Methodology
-This project was developed as part of a Scientific Research (NCKH) initiative. For detailed technical explanations, please refer to the documentation:
-*   [Methodology (Vietnamese)](Chương_II_Phương_pháp_nghiên_cứu.md)
-*   [Results & Evaluation (Vietnamese)](Chương_III_Kết_quả_nghiên_cứu.md)
-*   [Future Robustness Upgrades](Huong_Nang_Cap_Robustness.md)
+This project was developed as part of a Scientific Research (NCKH) initiative at the Banking Academy of Vietnam. It focuses on the application of deep learning for real-time biometric security and deepfake forensics.
 
 ---
 
