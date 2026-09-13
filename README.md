@@ -316,15 +316,6 @@ Chúng tôi chào đón các đóng góp! Vui lòng:
 
 ---
 
-## 📧 Liên hệ
-
-**Tác giả**: Quốc Đạt  
-**Email**: qdat18@gmail.com  
-**Trường**: Học viện Ngân hàng Việt Nam  
-**Chuyên đề**: Phát hiện Deepfake & Bảo mật Sinh trắc  
-
----
-
 ## 📜 License
 
 Dự án này được cấp phép dưới **MIT License** - xem file [LICENSE](LICENSE) để chi tiết.
