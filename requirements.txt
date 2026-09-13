@@ -1,4 +1,3 @@
-opencv-python-headless>=4.8.0
 streamlit>=1.28.0
 torch>=2.1.0
 torchvision
@@ -14,3 +13,6 @@ tqdm
 scipy
 pillow
 gdown>=4.7.0
+libsm6
+libxext6
+libxrender-dev
