@@ -1,68 +1,103 @@
 """
-Streamlit Cloud Compatible Version
+Streamlit Cloud Compatible Version - Simplified
 Deepfake Detection System - Video Lab Only
-Removed webcam-dependent features for cloud deployment
 """
 import streamlit as st
-import cv2
-import torch
-import numpy as np
-import os
-import tempfile
-import time
-from PIL import Image
-from torchvision import transforms
-import sys
-from pathlib import Path
+
+st.set_page_config(
+    page_title="🛡️ Deepfake Detection System",
+    layout="wide"
+)
+
+# Try import with error handling
+try:
+    import cv2
+    import torch
+    import numpy as np
+    import os
+    import tempfile
+    from PIL import Image
+    from torchvision import transforms
+    from collections import deque
+    from scipy.spatial.distance import cosine
+    import pandas as pd
+    import gdown
+except ImportError as e:
+    st.error(f"❌ Import Error: {str(e)}")
+    st.info("Streamlit Cloud is installing dependencies. Please wait and refresh in 2-3 minutes.")
+    st.stop()
 
 # Add Demo directory to path
+import sys
+from pathlib import Path
 demo_dir = Path(__file__).parent / "Demo"
 sys.path.insert(0, str(demo_dir))
 
-from model_pytorch import DeepfakeEfficientNet
-from collections import deque
-from scipy.spatial.distance import cosine
-import pandas as pd
+try:
+    from model_pytorch import DeepfakeEfficientNet
+except ImportError:
+    st.error("❌ Could not import model. Dependencies still installing...")
+    st.stop()
 
 MODEL_PATH = 'Demo/models/best_pytorch_model_final.pth'
+GOOGLE_DRIVE_ID = "1MkgcU0iAlBT3B0aSdxe57RdV1qF6zpa5"
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TARGET_SIZE = (380, 380)
 
-def load_face_cascade():
-    """Load Haar Cascade for face detection"""
-    cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
-    local_xml = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Demo', 'haarcascade_frontalface_default.xml')
+st.markdown("""
+<style>
+.stApp { background-color: #0c0a09; color: #f5f5f4; }
+.expert-card { 
+    background: #1c1917; 
+    border-radius: 8px; 
+    padding: 12px; 
+    border: 1px solid #44403c;
+}
+</style>
+""", unsafe_allow_html=True)
+
+def download_model_from_gdrive():
+    """Download model from Google Drive"""
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     
-    if (not cascade_path or not os.path.exists(cascade_path)) and not os.path.exists(local_xml):
-        import urllib.request
-        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+    if not os.path.exists(MODEL_PATH):
+        st.info("📥 Downloading model weights from Google Drive (first run)...")
         try:
-            os.makedirs(os.path.dirname(local_xml), exist_ok=True)
-            urllib.request.urlretrieve(url, local_xml)
+            gdown.download(
+                f"https://drive.google.com/uc?id={GOOGLE_DRIVE_ID}",
+                MODEL_PATH,
+                quiet=False
+            )
+            st.success("✅ Model downloaded successfully!")
+            return True
         except Exception as e:
-            st.warning(f"⚠️ Could not download cascade: {e}")
-    
-    cascade = cv2.CascadeClassifier(cascade_path) if os.path.exists(cascade_path) else cv2.CascadeClassifier()
-    if cascade.empty() and os.path.exists(local_xml):
-        cascade = cv2.CascadeClassifier(local_xml)
-    return cascade
+            st.error(f"❌ Failed to download model: {str(e)}")
+            return False
+    return True
+
+def load_face_cascade():
+    """Load Haar Cascade"""
+    cascade_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+    if os.path.exists(cascade_path):
+        return cv2.CascadeClassifier(cascade_path)
+    return None
 
 face_cascade = load_face_cascade()
 
 def safe_detect_faces(gray_img):
-    """Safely detect faces with fallback"""
+    """Safely detect faces"""
     if face_cascade is None or face_cascade.empty():
         h, w = gray_img.shape[:2]
         return np.array([[0, 0, w, h]])
     try:
         faces = face_cascade.detectMultiScale(gray_img, 1.1, 6)
         return faces if len(faces) > 0 else np.array([[0, 0, gray_img.shape[1], gray_img.shape[0]]])
-    except Exception:
+    except:
         h, w = gray_img.shape[:2]
         return np.array([[0, 0, w, h]])
 
 class IdentityTracker:
-    """Track face identity and motion metrics"""
+    """Track face metrics"""
     def __init__(self, window_size=15):
         self.centroid_buffer = deque(maxlen=window_size)
         self.embed_buffer = deque(maxlen=window_size)
@@ -85,40 +120,35 @@ class IdentityTracker:
             mean_lap = np.mean(self.lap_buffer)
             std_lap = np.std(self.lap_buffer) + 1e-6
             z_lap = (current_lap - mean_lap) / std_lap
-            
         return drift, jitter, smoothed_risk, z_lap
 
 def analyze_forensics(frame):
-    """Forensic analysis: blur detection and FFT"""
+    """Forensic analysis"""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     lap = cv2.Laplacian(gray, cv2.CV_64F).var()
     fft = np.percentile(np.log(np.abs(np.fft.fftshift(np.fft.fft2(gray))) + 1), 99) / (np.mean(np.log(np.abs(np.fft.fftshift(np.fft.fft2(gray))) + 1)) + 1e-6)
     
-    # Calibration: reduced sensitivity for real webcams
     v_lap = 1 / (1 + np.exp(np.clip(0.4 * (lap - 8.0), -100, 100)))
     v_fft = 1 / (1 + np.exp(np.clip(-0.5 * (fft - 3.2), -100, 100)))
-        
     return (v_lap + v_fft) / 2.0, lap
 
 @st.cache_resource
 def load_model():
-    """Load pre-trained model"""
-    model = DeepfakeEfficientNet(model_name='efficientnet_b4', pretrained=False)
+    """Load model"""
+    if not download_model_from_gdrive():
+        return None, 0.57
     
-    if os.path.exists(MODEL_PATH):
-        try:
-            ckpt = torch.load(MODEL_PATH, map_location=DEVICE)
-            model.load_state_dict(ckpt["model"] if isinstance(ckpt, dict) else ckpt)
-            return model.to(DEVICE).eval(), 0.57
-        except Exception as e:
-            st.warning(f"⚠️ Could not load model: {e}")
-            return model.to(DEVICE).eval(), 0.57
-    else:
-        st.warning(f"⚠️ Model weights not found at {MODEL_PATH}")
+    model = DeepfakeEfficientNet(model_name='efficientnet_b4', pretrained=False)
+    try:
+        ckpt = torch.load(MODEL_PATH, map_location=DEVICE)
+        model.load_state_dict(ckpt["model"] if isinstance(ckpt, dict) else ckpt)
+        return model.to(DEVICE).eval(), 0.57
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
         return model.to(DEVICE).eval(), 0.57
 
 def predict_expert(face_img, model):
-    """Predict deepfake probability for a face image"""
+    """Predict"""
     if face_img is None or face_img.size == 0:
         return 0.0, None
     
@@ -133,106 +163,52 @@ def predict_expert(face_img, model):
         logits, embed = model(img, return_features=True)
         return torch.sigmoid(logits).item(), embed.cpu().numpy().flatten()
 
-# ============================================================================
-# STREAMLIT UI
-# ============================================================================
-
-st.set_page_config(
-    page_title="🛡️ Deepfake Detection System",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-st.markdown("""
-<style>
-.stApp { background-color: #0c0a09; color: #f5f5f4; }
-.expert-card { 
-    background: #1c1917; 
-    border-radius: 8px; 
-    padding: 12px; 
-    border: 1px solid #44403c;
-}
-.warning-box {
-    background: #7c2d12;
-    border-left: 4px solid #ea580c;
-    padding: 12px;
-    border-radius: 4px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Load model
+# UI
 model, thresh = load_model()
 
-# Sidebar configuration
+if model is None:
+    st.error("❌ Failed to load model. Please try again later.")
+    st.stop()
+
 with st.sidebar:
     st.title("🛡️ Secure Gateway")
-    st.session_state.thresh = st.slider("Security Threshold (Ngưỡng bảo mật)", 0.1, 0.9, float(thresh))
-    st.info("✅ Status: Deepfake Shield v8.0 Cloud Ready")
-    st.markdown("---")
-    st.markdown("""
-    ### 📌 Cloud Version Info
-    - ✅ Video Lab Analysis
-    - ❌ Webcam: Not available on cloud
-    - 📦 Model: EfficientNet-B4
-    - 🔧 Framework: Streamlit
-    """)
+    st.session_state.thresh = st.slider("Security Threshold", 0.1, 0.9, float(thresh))
+    st.info("✅ Deepfake Shield v8.0 Cloud Ready")
 
 st.title("🛡️ Real-Time Deepfake Detection System")
-st.markdown("**NCKH - Vietnam Banking Academy | EfficientNet-B4 Transfer Learning**")
+st.markdown("**NCKH - Vietnam Banking Academy**")
 
-st.warning("⚠️ **STREAMLIT CLOUD VERSION**: Webcam features are disabled. Use Video Lab to upload and analyze videos.", icon="⚠️")
-
-# ============================================================================
-# VIDEO LAB TAB - ONLY FUNCTIONAL ON CLOUD
-# ============================================================================
+st.warning("⚠️ **STREAMLIT CLOUD VERSION**: Use Video Lab to analyze videos", icon="⚠️")
 
 st.markdown("---")
 st.subheader("🔬 Video Lab - Upload & Analyze")
-st.markdown("""
-Upload a video file (MP4, MOV) to analyze for deepfake indicators:
-- AI Detection Score
-- Forensic Analysis (Blur, FFT)
-- Identity Drift & Motion Jitter
-- Statistical Report
-""")
 
-up_video = st.file_uploader("📤 Upload Video File", type=["mp4", "mov", "avi", "mkv"], label_visibility="visible")
+up_video = st.file_uploader("📤 Upload Video File", type=["mp4", "mov", "avi"])
 
 if up_video:
-    st.info(f"📹 Processing: {up_video.name} ({up_video.size / 1024 / 1024:.1f} MB)")
+    st.info(f"📹 Processing: {up_video.name}")
     
-    # Save uploaded file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(up_video.read())
         tmp_path = tmp.name
     
-    # Process video
     try:
         cap = cv2.VideoCapture(tmp_path)
         
         if not cap.isOpened():
-            st.error("❌ Cannot open video file. Try a different format.")
+            st.error("❌ Cannot open video")
         else:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             
-            st.markdown(f"""
-            **Video Info:**
-            - Total Frames: {total_frames}
-            - FPS: {fps:.1f}
-            - Duration: {total_frames / fps:.1f}s
-            """)
+            st.markdown(f"**Video:** {total_frames} frames @ {fps:.1f} FPS")
             
             scores = []
             drifts = []
-            frames_processed = 0
             tr_lab = IdentityTracker()
+            progress_bar = st.progress(0, text="Analyzing...")
             
-            progress_bar = st.progress(0, text="Analyzing frames...")
-            status_text = st.empty()
-            
-            frame_step = max(1, total_frames // 100)  # Analyze ~100 frames max
+            frame_step = max(1, total_frames // 100)
             frame_idx = 0
             
             while cap.isOpened():
@@ -240,22 +216,17 @@ if up_video:
                 if not ret:
                     break
                 
-                # Skip frames for speed
                 if frame_idx % frame_step != 0:
                     frame_idx += 1
                     continue
                 
                 frame_idx += 1
-                frames_processed += 1
-                
-                # Analyze frame
                 f_resized = cv2.resize(frame, (640, 480))
                 forensic_score, lap_val = analyze_forensics(f_resized)
                 
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = safe_detect_faces(gray)
                 
-                ai_score = 0.0
                 if len(faces) > 0:
                     b = sorted(faces, key=lambda x: x[2] * x[3], reverse=True)[0]
                     face_roi = frame[b[1]:b[1]+b[3], b[0]:b[0]+b[2]]
@@ -269,165 +240,62 @@ if up_video:
                     scores.append(forensic_score)
                     drifts.append(0.0)
                 
-                # Update progress
-                progress = min(frame_idx / total_frames, 1.0)
-                progress_bar.progress(progress, text=f"Analyzing {frames_processed} frames...")
+                progress_bar.progress(min(frame_idx / total_frames, 1.0))
             
             cap.release()
             progress_bar.empty()
-            status_text.empty()
-            
-            # ================================================================
-            # STATISTICAL ANALYSIS
-            # ================================================================
             
             scores = np.array(scores)
             drifts = np.array(drifts)
-            
-            # Soft weighting for high-drift frames
             weights = np.ones_like(scores)
             weights[drifts > 0.85] = 0.3
             
-            # Calculate statistics
             p95 = np.percentile(scores, 95) if len(scores) > 0 else 0
             mean = np.average(scores, weights=weights) if len(scores) > 0 else 0
             std = np.sqrt(np.average((scores - mean)**2, weights=weights)) if len(scores) > 0 else 0
-            
             high_ratio = np.mean(scores > st.session_state.thresh) if len(scores) > 0 else 0
             spikes = np.sum(scores > 0.8) if len(scores) > 0 else 0
             d_p95 = np.percentile(drifts, 95) if len(drifts) > 0 else 0
             
-            # Decision logic
             is_fake = False
             reasons = []
             
             if p95 > 0.75 and high_ratio > 0.15:
                 is_fake = True
-                reasons.append("High risk in many frames")
+                reasons.append("High risk frames")
             
             if spikes > 3:
                 is_fake = True
-                reasons.append("Abnormal spikes detected")
+                reasons.append("Spikes detected")
             
             if d_p95 > 0.55:
                 is_fake = True
                 reasons.append("High identity drift")
             
-            # Override: Accept low scores with stable behavior
             if mean < 0.4 and std < 0.15 and d_p95 <= 0.55:
                 is_fake = False
-                reasons = ["Stable behavior - Likely Real"]
+                reasons = ["Stable - Authentic"]
             
-            # Display results
             st.markdown("---")
-            st.subheader("📊 Analysis Results")
-            
             col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Mean Score", f"{mean:.4f}")
-            with col2:
-                st.metric("Std Dev", f"{std:.4f}")
-            with col3:
-                st.metric("P95", f"{p95:.4f}")
-            with col4:
-                st.metric("Drift P95", f"{d_p95:.4f}")
+            with col1: st.metric("Mean", f"{mean:.4f}")
+            with col2: st.metric("Std", f"{std:.4f}")
+            with col3: st.metric("P95", f"{p95:.4f}")
+            with col4: st.metric("Drift", f"{d_p95:.4f}")
             
-            # Verdict
             st.markdown("---")
             if is_fake:
-                st.error(f"""
-                ### 🚨 DEEPFAKE DETECTED
-                **Verdict:** This video shows signs of deepfake/manipulation
-                
-                **Evidence:**
-                {' | '.join(f'• {r}' for r in reasons)}
-                
-                **Metrics:**
-                - P95 Score: {p95:.4f}
-                - High-Risk Frames: {high_ratio:.1%}
-                - Spikes (>0.8): {spikes}
-                - Max Drift: {d_p95:.4f}
-                """)
+                st.error(f"### 🚨 DEEPFAKE DETECTED\n\n{' | '.join(reasons)}\n\n- P95: {p95:.4f}\n- High-Risk: {high_ratio:.1%}")
             else:
-                st.success(f"""
-                ### ✅ VIDEO AUTHENTIC
-                **Verdict:** This video appears to be genuine
-                
-                **Evidence:**
-                {' | '.join(f'• {r}' for r in reasons)}
-                
-                **Metrics:**
-                - Mean Score: {mean:.4f}
-                - Std Dev: {std:.4f}
-                - P95: {p95:.4f}
-                - Stability: Stable
-                """)
+                st.success(f"### ✅ AUTHENTIC\n\n{' | '.join(reasons)}\n\n- Mean: {mean:.4f}\n- Std: {std:.4f}")
             
-            # Chart
-            st.markdown("---")
-            col_chart, col_hist = st.columns(2)
-            
-            with col_chart:
-                st.line_chart(scores, use_container_width=True)
-                st.caption("Risk Score Over Time")
-            
-            with col_hist:
-                st.bar_chart(pd.Series(scores).value_counts().sort_index(), use_container_width=True)
-                st.caption("Score Distribution")
-            
-            # Detailed stats table
-            st.markdown("---")
-            st.subheader("📈 Detailed Statistics")
-            
-            stats_df = pd.DataFrame({
-                'Metric': [
-                    'Mean Score',
-                    'Std Deviation',
-                    'P95 Score',
-                    'High-Risk Ratio',
-                    'Spike Count (>0.8)',
-                    'Max Drift',
-                    'Frames Analyzed',
-                    'Total Frames'
-                ],
-                'Value': [
-                    f"{mean:.6f}",
-                    f"{std:.6f}",
-                    f"{p95:.6f}",
-                    f"{high_ratio:.2%}",
-                    f"{int(spikes)}",
-                    f"{d_p95:.6f}",
-                    f"{len(scores)}",
-                    f"{total_frames}"
-                ]
-            })
-            
-            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+            st.line_chart(scores)
     
     except Exception as e:
-        st.error(f"❌ Error processing video: {str(e)}")
+        st.error(f"Error: {str(e)}")
     finally:
-        # Cleanup
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-# ============================================================================
-# FOOTER
-# ============================================================================
-
 st.markdown("---")
-st.markdown("""
-### 📚 About This Project
-- **Institution**: Vietnam Banking Academy (NCKH)
-- **Author**: Quốc Đạt
-- **Email**: qdat18@gmail.com
-- **Model**: EfficientNet-B4 with Transfer Learning
-- **Framework**: Streamlit + PyTorch
-
-⭐ **Cloud Version**: Limited to Video Lab (offline analysis)
-🖥️ **Local Version**: Full features including webcam & real-time detection
-""")
-
-st.markdown("""
-**License**: MIT | [GitHub](https://github.com/QDat18/NCKH-ITDE)
-""")
+st.markdown("**NCKH - Vietnam Banking Academy** | EfficientNet-B4 | [GitHub](https://github.com/QDat18/NCKH-ITDE)")
