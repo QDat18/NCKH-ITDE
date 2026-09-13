@@ -1,4 +1,5 @@
-torch>=2.0.0
+streamlit>=1.28.0
+torch==2.0.0
 torchvision
 timm>=0.9.0
 opencv-python-headless
@@ -11,4 +12,5 @@ seaborn
 scikit-learn
 tqdm
 scipy
-pyvirtualcam
+pillow
+gdown>=4.7.0
