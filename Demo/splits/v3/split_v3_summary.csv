@@ -1,0 +1,15 @@
+﻿split,source,samples,real,fake,groups
+train_v3,Celeb-DF,3501,1582,1919,902
+train_v3,DFDC,1102,175,927,228
+train_v3,FaceForensics++,15323,2537,12786,3455
+train_v3,ALL,19926,4294,15632,4585
+val_v3,Celeb-DF,603,303,300,149
+val_v3,DFDC,424,122,302,89
+val_v3,FaceForensics++,604,304,300,136
+val_v3,ALL,1631,729,902,374
+test_v3,Celeb-DF,393,233,160,148
+test_v3,DFDC,196,40,156,40
+test_v3,FaceForensics++,1808,316,1492,403
+test_v3,ALL,2397,589,1808,591
+dfdc_holdout_test,DFDC,191,40,151,40
+dfdc_holdout_test,ALL,191,40,151,40

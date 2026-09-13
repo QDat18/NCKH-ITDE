@@ -1,0 +1,7 @@
+﻿source,label,target_samples,selected_samples,selected_groups,available_groups
+FaceForensics++,0,300,304,68,636
+FaceForensics++,1,300,300,68,2955
+Celeb-DF,0,300,303,17,124
+Celeb-DF,1,300,300,132,927
+DFDC,0,120,122,25,61
+DFDC,1,300,302,64,256

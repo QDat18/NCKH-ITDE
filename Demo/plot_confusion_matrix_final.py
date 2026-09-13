@@ -70,6 +70,34 @@ def plot_final_confusion_matrix():
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
     
+    # Save False Positives and False Negatives for Error Analysis
+    print("Saving Error Analysis images...")
+    import shutil
+    os.makedirs("error_analysis/false_positives", exist_ok=True)
+    os.makedirs("error_analysis/false_negatives", exist_ok=True)
+
+    for i in range(len(all_labels)):
+        label = all_labels[i]
+        pred = all_preds[i]
+        path, _ = dataset.samples[i]
+
+        if label == 0 and pred == 1:
+            # False Positive: Real predicted as Fake
+            dst = os.path.join("error_analysis/false_positives", os.path.basename(path))
+            try:
+                shutil.copy(path, dst)
+            except:
+                pass
+        elif label == 1 and pred == 0:
+            # False Negative: Fake predicted as Real
+            dst = os.path.join("error_analysis/false_negatives", os.path.basename(path))
+            try:
+                shutil.copy(path, dst)
+            except:
+                pass
+
+    print("Success: Error Analysis images saved to 'error_analysis/' directory.")
+
     print(f"Success: Confusion Matrix saved to {save_path}")
     print("\nClassification Report:")
     print(classification_report(all_labels, all_preds, target_names=['Real', 'Fake']))

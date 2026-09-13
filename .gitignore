@@ -169,3 +169,37 @@ Chương_*.md
 Huong_Nang_Cap_Robustness.md
 extracted_text*.txt
 *.docx
+
+# =======================================================
+# NCKH Project Ignored Files (Non-code, Reports, Presentations)
+# =======================================================
+# Presentations & Office Documents
+*.pptx
+*.ppt
+*.tsv
+*.xlsx
+*.xls
+~$*
+Poster/
+
+# Test Datasets & Output Dumps
+Demo/data_dfdc_test/
+Demo/evaluation_runs/
+Demo/phase2_outputs/
+Demo/phase3_outputs/
+*_outputs/
+data_*/
+
+# Training Logs & Temporary Artifacts
+Demo/training_log*.csv
+Demo/confusion_matrix_epoch_*.png
+_archive*/
+Demo/_archive*/
+
+# Personal notes
+NOI_DUNG_BO_SUNG_TONG_QUAN_BASELINE.md
+
+# PyTorch and Model weights
+*.pt
+*.bin
+*.onnx

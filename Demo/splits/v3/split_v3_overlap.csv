@@ -1,0 +1,7 @@
+﻿left_split,right_split,left_groups,right_groups,overlap_groups,overlap_examples
+train_v3,val_v3,4585,374,0,
+train_v3,test_v3,4585,591,0,
+train_v3,dfdc_holdout_test,4585,40,0,
+val_v3,test_v3,374,591,0,
+val_v3,dfdc_holdout_test,374,40,0,
+test_v3,dfdc_holdout_test,591,40,0,

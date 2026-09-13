@@ -14,7 +14,7 @@ def calculate_eer(y_true, y_prob):
     eer = (fpr[idx] + fnr[idx]) / 2
     return eer
 
-def evaluate_subset(model, loader, device, name):
+def evaluate_subset(model, loader, device, name, threshold=0.5):
     model.eval()
     all_preds = []
     all_labels = []
@@ -33,7 +33,7 @@ def evaluate_subset(model, loader, device, name):
     fpr, tpr, _ = roc_curve(all_labels, all_preds)
     roc_auc = auc(fpr, tpr)
     eer = calculate_eer(all_labels, all_preds)
-    binary_preds = [1 if p > 0.5 else 0 for p in all_preds]
+    binary_preds = [1 if p > threshold else 0 for p in all_preds]
     acc = accuracy_score(all_labels, binary_preds)
     
     return {
@@ -67,7 +67,13 @@ def cross_dataset_test():
     
     # 2. Load Model
     model = DeepfakeEfficientNet(pretrained=False).to(DEVICE)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True))
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
+    if isinstance(checkpoint, dict) and "model" in checkpoint:
+        model.load_state_dict(checkpoint["model"])
+        threshold = checkpoint.get("threshold", 0.5)
+    else:
+        model.load_state_dict(checkpoint)
+        threshold = 0.5
     
     # 3. Evaluate
     results = []
@@ -76,13 +82,13 @@ def cross_dataset_test():
     if ff_lines:
         ds_ff = DeepfakeDataset("splits/temp_cross/ff_test.txt", transform=get_transforms(is_train=False))
         dl_ff = DataLoader(ds_ff, batch_size=16, shuffle=False)
-        results.append(evaluate_subset(model, dl_ff, DEVICE, "FaceForensics++"))
+        results.append(evaluate_subset(model, dl_ff, DEVICE, "FaceForensics++", threshold))
         
     # Evaluate Celeb-DF
     if celeb_lines:
         ds_celeb = DeepfakeDataset("splits/temp_cross/celeb_test.txt", transform=get_transforms(is_train=False))
         dl_celeb = DataLoader(ds_celeb, batch_size=16, shuffle=False)
-        results.append(evaluate_subset(model, dl_celeb, DEVICE, "Celeb-DF"))
+        results.append(evaluate_subset(model, dl_celeb, DEVICE, "Celeb-DF", threshold))
         
     # 4. Report
     df = pd.DataFrame(results)

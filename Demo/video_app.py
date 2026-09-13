@@ -17,7 +17,34 @@ import pandas as pd
 MODEL_PATH = 'models/best_pytorch_model_final.pth' 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TARGET_SIZE = (380, 380)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+def load_face_cascade():
+    cascade_path = os.path.join(getattr(cv2.data, 'haarcascades', ''), 'haarcascade_frontalface_default.xml')
+    local_xml = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'haarcascade_frontalface_default.xml')
+    if (not cascade_path or not os.path.exists(cascade_path)) and not os.path.exists(local_xml):
+        import urllib.request
+        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+        try:
+            urllib.request.urlretrieve(url, local_xml)
+        except Exception:
+            pass
+    cascade = cv2.CascadeClassifier(cascade_path) if os.path.exists(cascade_path) else cv2.CascadeClassifier()
+    if cascade.empty() and os.path.exists(local_xml):
+        cascade = cv2.CascadeClassifier(local_xml)
+    return cascade
+
+face_cascade = load_face_cascade()
+
+def safe_detect_faces(gray_img):
+    if face_cascade is None or face_cascade.empty():
+        h, w = gray_img.shape[:2]
+        return np.array([[0, 0, w, h]])
+    try:
+        faces = face_cascade.detectMultiScale(gray_img, 1.1, 6)
+        return faces
+    except Exception:
+        h, w = gray_img.shape[:2]
+        return np.array([[0, 0, w, h]])
 
 class IdentityTracker:
     def __init__(self, window_size=15):
@@ -141,7 +168,7 @@ with t_sim:
             for idx, (frame, tracker) in enumerate([(f1, tr1), (f2, tr2)]):
                 fr, lap_val = analyze_forensics(frame)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = face_cascade.detectMultiScale(gray, 1.1, 6)
+                faces = safe_detect_faces(gray)
                 p, em = 0.0, None
                 if len(faces) > 0:
                     b = sorted(faces, key=lambda x: x[2]*x[3], reverse=True)[0]
@@ -230,7 +257,7 @@ with t_call:
             fc = cv2.resize(cv2.flip(fc, 1), (640, 480))
             
             gray_initial = cv2.cvtColor(fc, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray_initial, 1.1, 6)
+            faces = safe_detect_faces(gray_initial)
             
             # Hacker Attack Simulation (FaceSwap)
             if simulate_attack and len(faces) > 0:
@@ -311,7 +338,7 @@ with t_lab:
             curr += 1
             if curr % 15 != 0: continue
             f_r, lap_val = analyze_forensics(cv2.resize(f, (640, 480)))
-            faces = face_cascade.detectMultiScale(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY), 1.1, 6)
+            faces = safe_detect_faces(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY))
             a_s = 0.0
             if len(faces) > 0:
                 b = sorted(faces, key=lambda x: x[2]*x[3], reverse=True)[0]
